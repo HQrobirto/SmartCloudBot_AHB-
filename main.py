@@ -1,11 +1,10 @@
-
 import time
 import datetime
 import requests
 import pandas as pd
 import yfinance as yf
+import os
 from groq import Groq
-
 # ── إعدادات ──
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
