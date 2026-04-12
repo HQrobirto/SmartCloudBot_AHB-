@@ -33,7 +33,7 @@ class SmartCloudBot:
         self.trades = []
         self.last_report = datetime.datetime.now()
 
-        self.send_msg(f"🧠 SmartCloudBot v6.6 | Backtest Mode | Balance: ${self.balance:.2f}")
+        self.send_msg(f"🧠 SmartCloudBot v6.6 | Debug Mode | Balance: ${self.balance:.2f}")
 
     def send_msg(self, text):
         print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}")
@@ -61,8 +61,7 @@ class SmartCloudBot:
                     requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto",
                                   data={'chat_id': CHAT_ID, 'caption': title}, files={'photo': photo})
                 os.remove(chart_path)
-        except Exception as e:
-            print(f"Chart Error: {e}")
+        except: pass
 
     def calculate_indicators(self, df):
         close = df['Close']
@@ -99,31 +98,43 @@ class SmartCloudBot:
         return df
 
     def layered_smart_long(self, row):
-        if row['Close'] <= row['EMA200']: return False
-        if row['Close'] <= row['Don_High']: return False
-        if row['Volume'] <= row['Vol_MA'] * 1.5: return False
-        if row['ATR'] < 1.0: return False
-        if row['RSI'] > 70: return False
-        if row['ADX'] < 25: return False
-        if row['MACD'] <= row['MACD_Signal']: return False
+        reasons = []
+        if row['Close'] <= row['EMA200']: reasons.append("EMA200")
+        if row['Close'] <= row['Don_High']: reasons.append("Donchian Breakout")
+        if row['Volume'] <= row['Vol_MA'] * 1.3: reasons.append("Volume Low")   # خففت إلى 1.3
+        if row['ATR'] < 1.0: reasons.append("Low ATR")
+        if row['RSI'] > 70: reasons.append("RSI Overbought")
+        if row['ADX'] < 20: reasons.append("ADX Weak")        # خففت إلى 20
+        if row['MACD'] <= row['MACD_Signal']: reasons.append("MACD")
+
+        if reasons:
+            print(f"Skipped LONG: {', '.join(reasons)}")
+            return False
         return True
 
     def layered_smart_short(self, row):
-        if row['Close'] >= row['EMA200']: return False
-        if row['Close'] >= row['Don_Low']: return False
-        if row['Volume'] <= row['Vol_MA'] * 1.5: return False
-        if row['ATR'] < 1.0: return False
-        if row['RSI'] < 30: return False
-        if row['ADX'] < 25: return False
-        if row['MACD'] >= row['MACD_Signal']: return False
+        reasons = []
+        if row['Close'] >= row['EMA200']: reasons.append("EMA200")
+        if row['Close'] >= row['Don_Low']: reasons.append("Donchian")
+        if row['Volume'] <= row['Vol_MA'] * 1.3: reasons.append("Volume")
+        if row['ATR'] < 1.0: reasons.append("ATR")
+        if row['RSI'] < 30: reasons.append("RSI Oversold")
+        if row['ADX'] < 20: reasons.append("ADX")
+        if row['MACD'] >= row['MACD_Signal']: reasons.append("MACD")
+
+        if reasons:
+            print(f"Skipped SHORT: {', '.join(reasons)}")
+            return False
         return True
 
     def run_backtest(self, days=30):
-        self.send_msg(f"🔄 بدء Backtest لـ {days} يوم | رصيد مبدئي: ${self.balance:.2f}")
+        self.send_msg(f"🔄 بدء Backtest لـ {days} يوم | رصيد: ${self.balance:.2f}")
 
         df = yf.download(SYMBOL, interval=INTERVAL, period=f"{days}d", progress=False)
+        self.send_msg(f"✅ تم تحميل {len(df)} شمعة من البيانات")
+
         if len(df) < 200:
-            self.send_msg("❌ بيانات غير كافية للـ Backtest")
+            self.send_msg("❌ بيانات قليلة جداً")
             return
 
         if isinstance(df.columns, pd.MultiIndex):
@@ -155,11 +166,13 @@ class SmartCloudBot:
                     self.send_chart(df.iloc[:i+1], f"Backtest SHORT - {close:.2f}")
                     self.state = "IN_SHORT"
 
+            # ... (باقي كود إدارة الصفقات Partial + Trailing + Exit كما هو في النسخة السابقة)
+
             elif self.state == "IN_LONG":
                 if close >= self.tp1_price and self.tp1_price != 0:
                     partial_pnl = (self.tp1_price - self.entry_price) * 100 * 0.5
                     self.balance += partial_pnl
-                    self.send_msg(f"✅ Partial Close LONG 50% | +${partial_pnl:.2f} | Balance: ${self.balance:.2f}")
+                    self.send_msg(f"✅ Partial Close LONG | +${partial_pnl:.2f} | Balance: ${self.balance:.2f}")
                     self.tp1_price = 0
 
                 if close - self.entry_price > atr * TRAILING_ACTIVATION:
@@ -178,7 +191,7 @@ class SmartCloudBot:
                 if close <= self.tp1_price and self.tp1_price != 0:
                     partial_pnl = (self.entry_price - self.tp1_price) * 100 * 0.5
                     self.balance += partial_pnl
-                    self.send_msg(f"✅ Partial Close SHORT 50% | +${partial_pnl:.2f} | Balance: ${self.balance:.2f}")
+                    self.send_msg(f"✅ Partial Close SHORT | +${partial_pnl:.2f} | Balance: ${self.balance:.2f}")
                     self.tp1_price = 0
 
                 if self.entry_price - close > atr * TRAILING_ACTIVATION:
@@ -196,11 +209,9 @@ class SmartCloudBot:
         # التقرير النهائي
         total_pnl = sum(t.get('pnl', 0) for t in self.trades)
         winrate = (sum(1 for t in self.trades if t.get('pnl', 0) > 0) / len(self.trades) * 100) if self.trades else 0
-        
         self.send_msg(f"""
-🎯 نهاية Backtest لـ {days} يوم
-────────────────────
-الرصيد المبدئي: ${INITIAL_BALANCE:.2f}
+🎯 نهاية Backtest
+────────────────
 الرصيد النهائي: ${self.balance:.2f}
 إجمالي P&L: ${total_pnl:.2f}
 عدد الصفقات: {len(self.trades)}
