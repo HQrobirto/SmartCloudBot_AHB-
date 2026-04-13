@@ -14,11 +14,12 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 SYMBOL = "GC=F"
 INTERVAL = "5m"
 
-INITIAL_BALANCE = 50.0
+# ── إعدادات المحفظة (تم تعديلها لتكون واقعية) ──
+INITIAL_BALANCE = 5000.0      # رصيد واقعي للاختبار
 SL_MULTIPLIER = 1.5
 TP1_MULTIPLIER = 2.0
 TP2_MULTIPLIER = 4.0
-TRAILING_ACTIVATION = 1.5   # خففت قليلاً
+TRAILING_ACTIVATION = 1.5
 
 groq = Groq(api_key=GROQ_API_KEY)
 
@@ -32,7 +33,7 @@ class SmartCloudBot:
         self.tp2_price = 0.0
         self.trades = []
 
-        self.send_msg(f"🧠 SmartCloudBot v6.7 | Debug Mode | Balance: ${self.balance:.2f}")
+        self.send_msg(f"🧠 SmartCloudBot v6.8 Final | Debug + Realistic Balance ${self.balance:.0f}")
 
     def send_msg(self, text):
         print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}")
@@ -41,6 +42,26 @@ class SmartCloudBot:
                 requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
                               data={'chat_id': CHAT_ID, 'text': text}, timeout=10)
             except: pass
+
+    def send_chart(self, df, title):
+        try:
+            plt.figure(figsize=(12, 6))
+            plt.plot(df.index, df['Close'], label='Close', color='blue')
+            plt.plot(df.index, df['EMA200'], label='EMA200', color='orange')
+            plt.fill_between(df.index, df['Don_Low'], df['Don_High'], color='gray', alpha=0.25)
+            plt.title(title)
+            plt.legend()
+            plt.grid(True)
+            chart_path = "chart.png"
+            plt.savefig(chart_path)
+            plt.close()
+
+            if TELEGRAM_TOKEN and CHAT_ID:
+                with open(chart_path, 'rb') as photo:
+                    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto",
+                                  data={'chat_id': CHAT_ID, 'caption': title}, files={'photo': photo})
+                os.remove(chart_path)
+        except: pass
 
     def calculate_indicators(self, df):
         close = df['Close']
@@ -83,16 +104,16 @@ class SmartCloudBot:
         if row['Close'] <= row['Don_High']:
             print("Skipped LONG: No Donchian Breakout")
             return False
-        if row['Volume'] <= row['Vol_MA'] * 1.2:   # خففت أكتر
+        if row['Volume'] <= row['Vol_MA'] * 1.2:
             print("Skipped LONG: Volume too low")
             return False
-        if row['ATR'] < 0.8:   # خففت
+        if row['ATR'] < 0.8:
             print("Skipped LONG: ATR too low")
             return False
-        if row['RSI'] > 75:    # خففت
+        if row['RSI'] > 75:
             print("Skipped LONG: RSI Overbought")
             return False
-        if row['ADX'] < 18:    # خففت
+        if row['ADX'] < 18:
             print("Skipped LONG: ADX too weak")
             return False
         if row['MACD'] <= row['MACD_Signal']:
@@ -128,14 +149,14 @@ class SmartCloudBot:
         print("✅ SHORT Signal Accepted!")
         return True
 
-    def run_backtest(self, days=30):
+    def run_backtest(self, days=30, send_charts=False):
         self.send_msg(f"🔄 بدء Backtest لـ {days} يوم | رصيد: ${self.balance:.2f}")
 
         df = yf.download(SYMBOL, interval=INTERVAL, period=f"{days}d", progress=False)
         self.send_msg(f"✅ تم تحميل {len(df)} شمعة")
 
         if len(df) < 100:
-            self.send_msg("❌ بيانات قليلة")
+            self.send_msg("❌ بيانات قليلة جداً")
             return
 
         if isinstance(df.columns, pd.MultiIndex):
@@ -155,7 +176,8 @@ class SmartCloudBot:
                     self.tp1_price = close + (atr * TP1_MULTIPLIER)
                     self.tp2_price = close + (atr * TP2_MULTIPLIER)
                     self.send_msg(f"🚀 LONG Breakout @ {close:.2f}")
-                    self.send_chart(df.iloc[:i+1], f"Backtest LONG - {close:.2f}")
+                    if send_charts:
+                        self.send_chart(df.iloc[:i+1], f"Backtest LONG - {close:.2f}")
                     self.state = "IN_LONG"
 
                 elif self.layered_smart_short(row):
@@ -164,11 +186,11 @@ class SmartCloudBot:
                     self.tp1_price = close - (atr * TP1_MULTIPLIER)
                     self.tp2_price = close - (atr * TP2_MULTIPLIER)
                     self.send_msg(f"🔻 SHORT Breakout @ {close:.2f}")
-                    self.send_chart(df.iloc[:i+1], f"Backtest SHORT - {close:.2f}")
+                    if send_charts:
+                        self.send_chart(df.iloc[:i+1], f"Backtest SHORT - {close:.2f}")
                     self.state = "IN_SHORT"
 
-            # إدارة الصفقات (Partial + Trailing + Exit) كما هي في النسخة السابقة...
-
+            # إدارة الصفقات (Partial + Trailing + Exit)
             elif self.state == "IN_LONG":
                 if close >= self.tp1_price and self.tp1_price != 0:
                     partial_pnl = (self.tp1_price - self.entry_price) * 100 * 0.5
@@ -221,4 +243,4 @@ Winrate: {winrate:.1f}%
 
 if __name__ == "__main__":
     bot = SmartCloudBot()
-    bot.run_backtest(days=30)
+    bot.run_backtest(days=30, send_charts=False)   # send_charts=False لتجنب السبام
