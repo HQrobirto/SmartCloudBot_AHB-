@@ -18,7 +18,7 @@ INITIAL_BALANCE = 50.0
 SL_MULTIPLIER = 1.5
 TP1_MULTIPLIER = 2.0
 TP2_MULTIPLIER = 4.0
-TRAILING_ACTIVATION = 2.0
+TRAILING_ACTIVATION = 1.5   # خففت قليلاً
 
 groq = Groq(api_key=GROQ_API_KEY)
 
@@ -31,9 +31,8 @@ class SmartCloudBot:
         self.tp1_price = 0.0
         self.tp2_price = 0.0
         self.trades = []
-        self.last_report = datetime.datetime.now()
 
-        self.send_msg(f"🧠 SmartCloudBot v6.6 | Debug Mode | Balance: ${self.balance:.2f}")
+        self.send_msg(f"🧠 SmartCloudBot v6.7 | Debug Mode | Balance: ${self.balance:.2f}")
 
     def send_msg(self, text):
         print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}")
@@ -42,26 +41,6 @@ class SmartCloudBot:
                 requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
                               data={'chat_id': CHAT_ID, 'text': text}, timeout=10)
             except: pass
-
-    def send_chart(self, df, title):
-        try:
-            plt.figure(figsize=(12, 6))
-            plt.plot(df.index, df['Close'], label='Close', color='blue')
-            plt.plot(df.index, df['EMA200'], label='EMA200', color='orange')
-            plt.fill_between(df.index, df['Don_Low'], df['Don_High'], color='gray', alpha=0.25)
-            plt.title(title)
-            plt.legend()
-            plt.grid(True)
-            chart_path = "chart.png"
-            plt.savefig(chart_path)
-            plt.close()
-
-            if TELEGRAM_TOKEN and CHAT_ID:
-                with open(chart_path, 'rb') as photo:
-                    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto",
-                                  data={'chat_id': CHAT_ID, 'caption': title}, files={'photo': photo})
-                os.remove(chart_path)
-        except: pass
 
     def calculate_indicators(self, df):
         close = df['Close']
@@ -98,43 +77,65 @@ class SmartCloudBot:
         return df
 
     def layered_smart_long(self, row):
-        reasons = []
-        if row['Close'] <= row['EMA200']: reasons.append("EMA200")
-        if row['Close'] <= row['Don_High']: reasons.append("Donchian Breakout")
-        if row['Volume'] <= row['Vol_MA'] * 1.3: reasons.append("Volume Low")   # خففت إلى 1.3
-        if row['ATR'] < 1.0: reasons.append("Low ATR")
-        if row['RSI'] > 70: reasons.append("RSI Overbought")
-        if row['ADX'] < 20: reasons.append("ADX Weak")        # خففت إلى 20
-        if row['MACD'] <= row['MACD_Signal']: reasons.append("MACD")
-
-        if reasons:
-            print(f"Skipped LONG: {', '.join(reasons)}")
+        if row['Close'] <= row['EMA200']:
+            print("Skipped LONG: Below EMA200")
             return False
+        if row['Close'] <= row['Don_High']:
+            print("Skipped LONG: No Donchian Breakout")
+            return False
+        if row['Volume'] <= row['Vol_MA'] * 1.2:   # خففت أكتر
+            print("Skipped LONG: Volume too low")
+            return False
+        if row['ATR'] < 0.8:   # خففت
+            print("Skipped LONG: ATR too low")
+            return False
+        if row['RSI'] > 75:    # خففت
+            print("Skipped LONG: RSI Overbought")
+            return False
+        if row['ADX'] < 18:    # خففت
+            print("Skipped LONG: ADX too weak")
+            return False
+        if row['MACD'] <= row['MACD_Signal']:
+            print("Skipped LONG: MACD not bullish")
+            return False
+
+        print("✅ LONG Signal Accepted!")
         return True
 
     def layered_smart_short(self, row):
-        reasons = []
-        if row['Close'] >= row['EMA200']: reasons.append("EMA200")
-        if row['Close'] >= row['Don_Low']: reasons.append("Donchian")
-        if row['Volume'] <= row['Vol_MA'] * 1.3: reasons.append("Volume")
-        if row['ATR'] < 1.0: reasons.append("ATR")
-        if row['RSI'] < 30: reasons.append("RSI Oversold")
-        if row['ADX'] < 20: reasons.append("ADX")
-        if row['MACD'] >= row['MACD_Signal']: reasons.append("MACD")
-
-        if reasons:
-            print(f"Skipped SHORT: {', '.join(reasons)}")
+        if row['Close'] >= row['EMA200']:
+            print("Skipped SHORT: Above EMA200")
             return False
+        if row['Close'] >= row['Don_Low']:
+            print("Skipped SHORT: No Donchian Breakout")
+            return False
+        if row['Volume'] <= row['Vol_MA'] * 1.2:
+            print("Skipped SHORT: Volume too low")
+            return False
+        if row['ATR'] < 0.8:
+            print("Skipped SHORT: ATR too low")
+            return False
+        if row['RSI'] < 25:
+            print("Skipped SHORT: RSI Oversold")
+            return False
+        if row['ADX'] < 18:
+            print("Skipped SHORT: ADX too weak")
+            return False
+        if row['MACD'] >= row['MACD_Signal']:
+            print("Skipped SHORT: MACD not bearish")
+            return False
+
+        print("✅ SHORT Signal Accepted!")
         return True
 
     def run_backtest(self, days=30):
         self.send_msg(f"🔄 بدء Backtest لـ {days} يوم | رصيد: ${self.balance:.2f}")
 
         df = yf.download(SYMBOL, interval=INTERVAL, period=f"{days}d", progress=False)
-        self.send_msg(f"✅ تم تحميل {len(df)} شمعة من البيانات")
+        self.send_msg(f"✅ تم تحميل {len(df)} شمعة")
 
-        if len(df) < 200:
-            self.send_msg("❌ بيانات قليلة جداً")
+        if len(df) < 100:
+            self.send_msg("❌ بيانات قليلة")
             return
 
         if isinstance(df.columns, pd.MultiIndex):
@@ -166,7 +167,7 @@ class SmartCloudBot:
                     self.send_chart(df.iloc[:i+1], f"Backtest SHORT - {close:.2f}")
                     self.state = "IN_SHORT"
 
-            # ... (باقي كود إدارة الصفقات Partial + Trailing + Exit كما هو في النسخة السابقة)
+            # إدارة الصفقات (Partial + Trailing + Exit) كما هي في النسخة السابقة...
 
             elif self.state == "IN_LONG":
                 if close >= self.tp1_price and self.tp1_price != 0:
@@ -206,9 +207,9 @@ class SmartCloudBot:
                     self.send_msg(f"📈 خروج كامل SHORT | P&L: {pnl:.2f}$ | Balance: ${self.balance:.2f}")
                     self.state = "IDLE"
 
-        # التقرير النهائي
         total_pnl = sum(t.get('pnl', 0) for t in self.trades)
         winrate = (sum(1 for t in self.trades if t.get('pnl', 0) > 0) / len(self.trades) * 100) if self.trades else 0
+        
         self.send_msg(f"""
 🎯 نهاية Backtest
 ────────────────
