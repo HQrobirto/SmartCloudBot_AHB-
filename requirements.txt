@@ -1,4 +1,7 @@
 binance
+cryptography
+aiohttp
+ccxt
 pandas
 numpy
 yfinance
@@ -6,6 +9,3 @@ requests
 matplotlib
 groq
 python-dotenv
-beautifulsoup4
-websockets
-cryptography
