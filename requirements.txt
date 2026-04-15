@@ -1,3 +1,4 @@
+binance
 pandas
 numpy
 yfinance
