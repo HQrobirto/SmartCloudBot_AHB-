@@ -6,105 +6,281 @@ import os
 import json
 from binance import Client
 
-# ── الإعدادات ──
+# ── إعدادات البوت ──
 BINANCE_API_KEY    = os.environ.get("BINANCE_API_KEY")
 BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET")
 TELEGRAM_TOKEN     = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID            = os.environ.get("CHAT_ID")
 
-SYMBOL = "PAXGUSDT" # الذهب على بينانس (أو استخدم رمز العقود الآجلة الخاص بك)
-INTERVAL = Client.KLINE_INTERVAL_5MINUTE
-QUANTITY = 0.02 # الكمية الكلية (للسماح بإغلاق جزئي 0.01)
+SYMBOL = "XAUUSDT"
+INTERVAL = "5m"
+
+INITIAL_BALANCE = 5000.0
+SL_MULTIPLIER = 1.5
+TP1_MULTIPLIER = 2.0
+TP2_MULTIPLIER = 4.0
+TRAILING_ACTIVATION = 1.5
+QUANTITY = 0.01          # حجم الصفقة الكامل
+PARTIAL_QUANTITY = 0.005 # 50% للإغلاق الجزئي
 
 client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
 
 class SmartCloudBot:
     def __init__(self):
+        self.balance = INITIAL_BALANCE
         self.state = "IDLE"
         self.entry_price = 0.0
         self.sl_price = 0.0
         self.tp1_price = 0.0
         self.tp2_price = 0.0
+        self.quantity = QUANTITY
+        self.position_side = None
+        self.df = pd.DataFrame()          # DataFrame للبيانات من Binance
+
         self.load_position()
-        self.send_msg("🤖 Bot v7.2 Online | Binance Data Stream Connected")
+        self.send_msg("🚀 SmartCloudBot v7.2 | Binance Live + Real Partial Close + Optimized Data")
+
+    def save_position(self):
+        if self.state == "IDLE":
+            if os.path.exists("position.json"):
+                os.remove("position.json")
+            return
+        data = {
+            "state": self.state,
+            "entry_price": self.entry_price,
+            "sl_price": self.sl_price,
+            "tp1_price": self.tp1_price,
+            "tp2_price": self.tp2_price,
+            "quantity": self.quantity,
+            "position_side": self.position_side
+        }
+        with open("position.json", "w") as f:
+            json.dump(data, f)
+
+    def load_position(self):
+        if not os.path.exists("position.json"):
+            return
+        try:
+            with open("position.json", "r") as f:
+                data = json.load(f)
+            self.state = data["state"]
+            self.entry_price = data["entry_price"]
+            self.sl_price = data["sl_price"]
+            self.tp1_price = data["tp1_price"]
+            self.tp2_price = data["tp2_price"]
+            self.quantity = data.get("quantity", QUANTITY)
+            self.position_side = data.get("position_side")
+            self.send_msg(f"🔄 تم تحميل صفقة مفتوحة: {self.state}")
+        except:
+            pass
 
     def send_msg(self, text):
         print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}")
         if TELEGRAM_TOKEN and CHAT_ID:
             try:
-                requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-                              data={'chat_id': CHAT_ID, 'text': text}, timeout=10)
-            except: pass
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                    data={"chat_id": CHAT_ID, "text": text},
+                    timeout=10
+                )
+            except:
+                pass
 
-    def get_live_data(self):
-        try:
-            # سحب البيانات مباشرة من بينانس لضمان دقة الأسعار
-            klines = client.get_klines(symbol=SYMBOL, interval=INTERVAL, limit=150)
-            df = pd.DataFrame(klines, columns=['time', 'Open', 'High', 'Low', 'Close', 'Volume', 'close_time', 'qav', 'num_trades', 'taker_base_vol', 'taker_quote_vol', 'ignore'])
-            df[['Open', 'High', 'Low', 'Close', 'Volume']] = df[['Open', 'High', 'Low', 'Close', 'Volume']].apply(pd.to_numeric)
-            return df
-        except Exception as e:
-            self.send_msg(f"⚠️ Data Error: {e}")
-            return None
-
-    def calculate_indicators(self, df):
-        # (نفس منطق الحساب الخاص بك لكن ببيانات بينانس الحية)
-        df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
-        high_low = df['High'] - df['Low']
-        high_cp = abs(df['High'] - df['Close'].shift())
-        low_cp = abs(df['Low'] - df['Close'].shift())
-        df['ATR'] = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1).rolling(14).mean()
-        # ... يمكنك إضافة باقي المؤشرات هنا ...
+    def get_latest_data(self):
+        """سحب آخر 1000 شمعة من Binance Futures (أسرع وأدق)"""
+        klines = client.futures_klines(
+            symbol=SYMBOL,
+            interval=INTERVAL,
+            limit=1000
+        )
+        df = pd.DataFrame(klines, columns=[
+            'open_time', 'Open', 'High', 'Low', 'Close', 'Volume',
+            'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+            'taker_buy_quote', 'ignore'
+        ])
+        df = df[['Open', 'High', 'Low', 'Close', 'Volume']].astype(float)
         return df
 
-    def execute_trade(self, side, qty):
+    def calculate_indicators(self, df):
+        close = df['Close']
+        high = df['High']
+        low = df['Low']
+        volume = df['Volume']
+
+        df['EMA100'] = close.ewm(span=100, adjust=False).mean()
+        df['ATR'] = pd.concat([
+            high - low,
+            abs(high - close.shift()),
+            abs(low - close.shift())
+        ], axis=1).max(axis=1).rolling(14).mean()
+
+        df['Don_High'] = high.rolling(15).max()
+        df['Don_Low'] = low.rolling(15).min()
+        df['Vol_MA'] = volume.rolling(20).mean()
+
+        # RSI
+        delta = close.diff()
+        gain = delta.where(delta > 0, 0).rolling(14).mean()
+        loss = -delta.where(delta < 0, 0).rolling(14).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+
+        # MACD
+        exp1 = close.ewm(span=12, adjust=False).mean()
+        exp2 = close.ewm(span=26, adjust=False).mean()
+        df['MACD'] = exp1 - exp2
+        df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+
+        # ADX (مبسط)
+        plus_dm = high.diff()
+        minus_dm = low.diff()
+        tr = pd.concat([high - low, abs(high - close.shift()), abs(low - close.shift())], axis=1).max(axis=1)
+        atr = tr.rolling(14).mean()
+        plus_di = 100 * (plus_dm.rolling(14).mean() / atr)
+        minus_di = 100 * (minus_dm.rolling(14).mean() / atr)
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+        df['ADX'] = dx.rolling(14).mean()
+
+        return df
+
+    def layered_smart_long(self, row):
+        return all([
+            row['Close'] > row['EMA100'],
+            row['Close'] > row['Don_High'],
+            row['Volume'] > row['Vol_MA'] * 1.1,
+            row['ATR'] > 0.6,
+            row['RSI'] < 78,
+            row['ADX'] > 15,
+            row['MACD'] > row['MACD_Signal']
+        ])
+
+    def layered_smart_short(self, row):
+        return all([
+            row['Close'] < row['EMA100'],
+            row['Close'] < row['Don_Low'],
+            row['Volume'] > row['Vol_MA'] * 1.1,
+            row['ATR'] > 0.6,
+            row['RSI'] > 22,
+            row['ADX'] > 15,
+            row['MACD'] < row['MACD_Signal']
+        ])
+
+    def open_position(self, side):
         try:
-            # تنفيذ حقيقي على Binance Futures
-            order = client.futures_create_order(symbol=SYMBOL, side=side, type='MARKET', quantity=qty)
-            return True
+            order = client.futures_create_order(
+                symbol=SYMBOL,
+                side=side,
+                type='MARKET',
+                quantity=self.quantity
+            )
+            self.position_side = side
+            self.send_msg(f"✅ تم فتح صفقة {side} | حجم: {self.quantity}")
+            self.save_position()
+            return order
         except Exception as e:
-            self.send_msg(f"❌ Order Error: {e}")
-            return False
+            self.send_msg(f"❌ خطأ فتح الصفقة: {e}")
+            return None
+
+    def close_partial(self):
+        """إغلاق جزئي حقيقي 50% على Binance"""
+        if not self.position_side:
+            return
+        opposite = "SELL" if self.position_side == "BUY" else "BUY"
+        try:
+            client.futures_create_order(
+                symbol=SYMBOL,
+                side=opposite,
+                type='MARKET',
+                quantity=PARTIAL_QUANTITY,
+                reduceOnly=True
+            )
+            self.quantity = PARTIAL_QUANTITY
+            self.send_msg(f"✅ Partial Close 50% | تم إغلاق {PARTIAL_QUANTITY} عقد")
+            self.save_position()
+        except Exception as e:
+            self.send_msg(f"❌ Partial Close error: {e}")
 
     def run(self):
-        while True:
-            df = self.get_live_data()
-            if df is None:
-                time.sleep(30) ; continue
+        self.send_msg("📡 SmartCloudBot v7.2 شغال على Binance Futures (XAUUSDT)")
 
-            df = self.calculate_indicators(df)
-            row = df.iloc[-1]
+        while True:
+            # تحديث البيانات (فقط آخر الشمعات)
+            new_df = self.get_latest_data()
+            self.df = new_df  # نستبدل كل مرة (أسرع وأبسط)
+
+            full_df = self.calculate_indicators(self.df)
+            row = full_df.iloc[-1]
+
             close = float(row['Close'])
             atr = float(row['ATR'])
 
+            # ── منطق الدخول ──
             if self.state == "IDLE":
-                # منطق الدخول (كما في كودك مع تحسين الشروط)
-                if close > row['EMA100'] and close > row['High'] - (atr*0.5): # مثال لشرط اختراق
-                    if self.execute_trade('BUY', QUANTITY):
-                        self.state = "IN_LONG"
-                        self.entry_price = close
-                        self.sl_price = close - (atr * 1.5)
-                        self.tp1_price = close + (atr * 2.0)
-                        self.tp2_price = close + (atr * 4.0)
-                        self.save_position()
-                        self.send_msg(f"🚀 BUY {SYMBOL} @ {close}")
+                if self.layered_smart_long(row):
+                    self.entry_price = close
+                    self.sl_price = close - (atr * SL_MULTIPLIER)
+                    self.tp1_price = close + (atr * TP1_MULTIPLIER)
+                    self.tp2_price = close + (atr * TP2_MULTIPLIER)
+                    self.quantity = QUANTITY
+                    self.send_msg(f"🚀 LONG Breakout @ {close:.2f}")
+                    self.open_position("BUY")
+                    self.state = "IN_LONG"
 
+                elif self.layered_smart_short(row):
+                    self.entry_price = close
+                    self.sl_price = close + (atr * SL_MULTIPLIER)
+                    self.tp1_price = close - (atr * TP1_MULTIPLIER)
+                    self.tp2_price = close - (atr * TP2_MULTIPLIER)
+                    self.quantity = QUANTITY
+                    self.send_msg(f"🔻 SHORT Breakout @ {close:.2f}")
+                    self.open_position("SELL")
+                    self.state = "IN_SHORT"
+
+            # ── إدارة الصفقة LONG ──
             elif self.state == "IN_LONG":
-                # 1. إغلاق جزئي حقيقي (TP1)
-                if self.tp1_price != 0 and close >= self.tp1_price:
-                    if self.execute_trade('SELL', QUANTITY/2):
-                        self.tp1_price = 0 # لعدم تكرار الإغلاق
-                        self.send_msg(f"💰 TP1 Hit! Closed 50%")
+                # Partial Close حقيقي
+                if close >= self.tp1_price and self.tp1_price != 0:
+                    self.close_partial()
+                    self.tp1_price = 0
+                    self.save_position()
+
+                # Trailing Stop
+                if close - self.entry_price > atr * TRAILING_ACTIVATION:
+                    new_sl = close - (atr * 1.2)
+                    if new_sl > self.sl_price:
+                        self.sl_price = new_sl
                         self.save_position()
 
-                # 2. خروج كامل (SL أو TP2)
+                # خروج كامل
                 if close <= self.sl_price or close >= self.tp2_price:
-                    remaining_qty = QUANTITY/2 if self.tp1_price == 0 else QUANTITY
-                    if self.execute_trade('SELL', remaining_qty):
-                        self.state = "IDLE"
-                        self.send_msg(f"🚪 Trade Closed @ {close}")
+                    pnl = (close - self.entry_price) * 100 * self.quantity
+                    self.balance += pnl
+                    self.send_msg(f"📉 خروج كامل LONG | P&L: {pnl:.2f}$")
+                    self.state = "IDLE"
+                    self.save_position()
+
+            # ── إدارة الصفقة SHORT ──
+            elif self.state == "IN_SHORT":
+                if close <= self.tp1_price and self.tp1_price != 0:
+                    self.close_partial()
+                    self.tp1_price = 0
+                    self.save_position()
+
+                if self.entry_price - close > atr * TRAILING_ACTIVATION:
+                    new_sl = close + (atr * 1.2)
+                    if new_sl < self.sl_price:
+                        self.sl_price = new_sl
                         self.save_position()
 
-            time.sleep(10) # تحديث أسرع للمراقبة
+                if close >= self.sl_price or close <= self.tp2_price:
+                    pnl = (self.entry_price - close) * 100 * self.quantity
+                    self.balance += pnl
+                    self.send_msg(f"📈 خروج كامل SHORT | P&L: {pnl:.2f}$")
+                    self.state = "IDLE"
+                    self.save_position()
 
-    # (أضف دالات save_position و load_position هنا كما في كودك)
+            time.sleep(30)
+
+if __name__ == "__main__":
+    bot = SmartCloudBot()
+    bot.run()
