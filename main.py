@@ -9,7 +9,7 @@ import json
 from binance import Client
 from groq import Groq
 
-# ── إعدادات Binance ──
+# ── إعدادات Binance (أضفها في Variables على Railway) ──
 BINANCE_API_KEY    = os.environ.get("BINANCE_API_KEY")
 BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET")
 
@@ -38,12 +38,11 @@ class SmartCloudBot:
         self.trades = []
         self.position_side = None
 
-        self.load_position()  # تحميل الصفقة المفتوحة إذا وجدت
+        self.load_position()  # تحميل الصفقة إذا كانت موجودة
 
         self.send_msg(f"🚀 SmartCloudBot v7.1 | Binance Live + Position Save | Balance: ${self.balance:.0f}")
 
     def save_position(self):
-        """حفظ حالة الصفقة المفتوحة"""
         if self.state == "IDLE":
             if os.path.exists("position.json"):
                 os.remove("position.json")
@@ -62,23 +61,18 @@ class SmartCloudBot:
         print("💾 تم حفظ حالة الصفقة")
 
     def load_position(self):
-        """تحميل الصفقة المفتوحة عند بدء البوت"""
         if not os.path.exists("position.json"):
             return
-
         try:
             with open("position.json", "r") as f:
                 data = json.load(f)
-
             self.state = data["state"]
             self.entry_price = data["entry_price"]
             self.sl_price = data["sl_price"]
             self.tp1_price = data["tp1_price"]
             self.tp2_price = data["tp2_price"]
             self.position_side = data.get("position_side")
-
-            self.send_msg(f"🔄 تم تحميل صفقة مفتوحة سابقًا: {self.state} @ {self.entry_price:.2f}")
-            print("📂 تم تحميل حالة الصفقة من الملف")
+            self.send_msg(f"🔄 تم تحميل صفقة مفتوحة: {self.state} @ {self.entry_price:.2f}")
         except:
             print("⚠️ خطأ في تحميل ملف الصفقة")
 
@@ -132,23 +126,55 @@ class SmartCloudBot:
         return df
 
     def layered_smart_long(self, row):
-        if row['Close'] <= row['EMA100']: return False
-        if row['Close'] <= row['Don_High']: return False
-        if row['Volume'] <= row['Vol_MA'] * 1.1: return False
-        if row['ATR'] < 0.6: return False
-        if row['RSI'] > 78: return False
-        if row['ADX'] < 15: return False
-        if row['MACD'] <= row['MACD_Signal']: return False
+        if row['Close'] <= row['EMA100']: 
+            print("Skipped LONG: Below EMA100")
+            return False
+        if row['Close'] <= row['Don_High']: 
+            print("Skipped LONG: No Donchian Breakout")
+            return False
+        if row['Volume'] <= row['Vol_MA'] * 1.1: 
+            print("Skipped LONG: Volume too low")
+            return False
+        if row['ATR'] < 0.6: 
+            print("Skipped LONG: ATR too low")
+            return False
+        if row['RSI'] > 78: 
+            print("Skipped LONG: RSI Overbought")
+            return False
+        if row['ADX'] < 15: 
+            print("Skipped LONG: ADX too weak")
+            return False
+        if row['MACD'] <= row['MACD_Signal']: 
+            print("Skipped LONG: MACD not bullish")
+            return False
+
+        print("✅ LONG Signal Accepted!")
         return True
 
     def layered_smart_short(self, row):
-        if row['Close'] >= row['EMA100']: return False
-        if row['Close'] >= row['Don_Low']: return False
-        if row['Volume'] <= row['Vol_MA'] * 1.1: return False
-        if row['ATR'] < 0.6: return False
-        if row['RSI'] < 22: return False
-        if row['ADX'] < 15: return False
-        if row['MACD'] >= row['MACD_Signal']: return False
+        if row['Close'] >= row['EMA100']: 
+            print("Skipped SHORT: Above EMA100")
+            return False
+        if row['Close'] >= row['Don_Low']: 
+            print("Skipped SHORT: No Donchian Breakout")
+            return False
+        if row['Volume'] <= row['Vol_MA'] * 1.1: 
+            print("Skipped SHORT: Volume too low")
+            return False
+        if row['ATR'] < 0.6: 
+            print("Skipped SHORT: ATR too low")
+            return False
+        if row['RSI'] < 22: 
+            print("Skipped SHORT: RSI Oversold")
+            return False
+        if row['ADX'] < 15: 
+            print("Skipped SHORT: ADX too weak")
+            return False
+        if row['MACD'] >= row['MACD_Signal']: 
+            print("Skipped SHORT: MACD not bearish")
+            return False
+
+        print("✅ SHORT Signal Accepted!")
         return True
 
     def open_position(self, side):
@@ -168,7 +194,7 @@ class SmartCloudBot:
             return None
 
     def run(self):
-        self.send_msg("📡 SmartCloudBot v7.1 شغال على Binance Futures + حفظ الصفقة")
+        self.send_msg("📡 SmartCloudBot v7.1 شغال على Binance Futures")
 
         while True:
             df = self.get_data()
@@ -201,7 +227,6 @@ class SmartCloudBot:
                     self.open_position("SELL")
                     self.state = "IN_SHORT"
 
-            # Trailing Stop + Partial Close + Exit
             elif self.state == "IN_LONG":
                 if close >= self.tp1_price and self.tp1_price != 0:
                     partial_pnl = (self.tp1_price - self.entry_price) * 100 * 0.5
@@ -214,7 +239,6 @@ class SmartCloudBot:
                     new_sl = close - (atr * 1.2)
                     if new_sl > self.sl_price:
                         self.sl_price = new_sl
-                        print(f"📈 Trailing Stop raised to {self.sl_price:.2f}")
                         self.save_position()
 
                 if close <= self.sl_price or close >= self.tp2_price:
@@ -237,7 +261,6 @@ class SmartCloudBot:
                     new_sl = close + (atr * 1.2)
                     if new_sl < self.sl_price:
                         self.sl_price = new_sl
-                        print(f"📉 Trailing Stop lowered to {self.sl_price:.2f}")
                         self.save_position()
 
                 if close >= self.sl_price or close <= self.tp2_price:
