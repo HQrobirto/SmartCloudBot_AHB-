@@ -8,3 +8,4 @@ groq
 python-dotenv
 beautifulsoup4
 websockets
+cryptography
