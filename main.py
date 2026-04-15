@@ -46,7 +46,6 @@ class SmartCloudBot:
             if os.path.exists("position.json"):
                 os.remove("position.json")
             return
-
         data = {
             "state": self.state,
             "entry_price": self.entry_price,
@@ -70,7 +69,7 @@ class SmartCloudBot:
             self.tp1_price = data["tp1_price"]
             self.tp2_price = data["tp2_price"]
             self.position_side = data.get("position_side")
-            self.send_msg(f"🔄 تم تحميل صفقة مفتوحة: {self.state}")
+            self.send_msg(f"🔄 تم تحميل صفقة مفتوحة سابقاً: {self.state}")
         except:
             pass
 
@@ -197,7 +196,7 @@ class SmartCloudBot:
                 if close >= self.tp1_price and self.tp1_price != 0:
                     partial_pnl = (self.tp1_price - self.entry_price) * 100 * 0.5
                     self.balance += partial_pnl
-                    self.send_msg(f"✅ Partial Close LONG | +${partial_pnl:.2f}")
+                    self.send_msg(f"✅ Partial Close LONG 50% | +${partial_pnl:.2f}")
                     self.tp1_price = 0
                     self.save_position()
 
@@ -219,7 +218,7 @@ class SmartCloudBot:
                 if close <= self.tp1_price and self.tp1_price != 0:
                     partial_pnl = (self.entry_price - self.tp1_price) * 100 * 0.5
                     self.balance += partial_pnl
-                    self.send_msg(f"✅ Partial Close SHORT | +${partial_pnl:.2f}")
+                    self.send_msg(f"✅ Partial Close SHORT 50% | +${partial_pnl:.2f}")
                     self.tp1_price = 0
                     self.save_position()
 
