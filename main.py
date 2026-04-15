@@ -3,13 +3,12 @@ import datetime
 import requests
 import pandas as pd
 import yfinance as yf
-import matplotlib.pyplot as plt
 import os
 import json
 from binance import Client
 from groq import Groq
 
-# ── إعدادات Binance (أضفها في Variables على Railway) ──
+# ── إعدادات Binance ──
 BINANCE_API_KEY    = os.environ.get("BINANCE_API_KEY")
 BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET")
 
@@ -38,9 +37,9 @@ class SmartCloudBot:
         self.trades = []
         self.position_side = None
 
-        self.load_position()  # تحميل الصفقة إذا كانت موجودة
+        self.load_position()
 
-        self.send_msg(f"🚀 SmartCloudBot v7.1 | Binance Live + Position Save | Balance: ${self.balance:.0f}")
+        self.send_msg(f"🚀 SmartCloudBot v7.1 | Binance Live + Position Save")
 
     def save_position(self):
         if self.state == "IDLE":
@@ -58,7 +57,6 @@ class SmartCloudBot:
         }
         with open("position.json", "w") as f:
             json.dump(data, f)
-        print("💾 تم حفظ حالة الصفقة")
 
     def load_position(self):
         if not os.path.exists("position.json"):
@@ -72,9 +70,9 @@ class SmartCloudBot:
             self.tp1_price = data["tp1_price"]
             self.tp2_price = data["tp2_price"]
             self.position_side = data.get("position_side")
-            self.send_msg(f"🔄 تم تحميل صفقة مفتوحة: {self.state} @ {self.entry_price:.2f}")
+            self.send_msg(f"🔄 تم تحميل صفقة مفتوحة: {self.state}")
         except:
-            print("⚠️ خطأ في تحميل ملف الصفقة")
+            pass
 
     def send_msg(self, text):
         print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}")
@@ -126,55 +124,23 @@ class SmartCloudBot:
         return df
 
     def layered_smart_long(self, row):
-        if row['Close'] <= row['EMA100']: 
-            print("Skipped LONG: Below EMA100")
-            return False
-        if row['Close'] <= row['Don_High']: 
-            print("Skipped LONG: No Donchian Breakout")
-            return False
-        if row['Volume'] <= row['Vol_MA'] * 1.1: 
-            print("Skipped LONG: Volume too low")
-            return False
-        if row['ATR'] < 0.6: 
-            print("Skipped LONG: ATR too low")
-            return False
-        if row['RSI'] > 78: 
-            print("Skipped LONG: RSI Overbought")
-            return False
-        if row['ADX'] < 15: 
-            print("Skipped LONG: ADX too weak")
-            return False
-        if row['MACD'] <= row['MACD_Signal']: 
-            print("Skipped LONG: MACD not bullish")
-            return False
-
-        print("✅ LONG Signal Accepted!")
+        if row['Close'] <= row['EMA100']: return False
+        if row['Close'] <= row['Don_High']: return False
+        if row['Volume'] <= row['Vol_MA'] * 1.1: return False
+        if row['ATR'] < 0.6: return False
+        if row['RSI'] > 78: return False
+        if row['ADX'] < 15: return False
+        if row['MACD'] <= row['MACD_Signal']: return False
         return True
 
     def layered_smart_short(self, row):
-        if row['Close'] >= row['EMA100']: 
-            print("Skipped SHORT: Above EMA100")
-            return False
-        if row['Close'] >= row['Don_Low']: 
-            print("Skipped SHORT: No Donchian Breakout")
-            return False
-        if row['Volume'] <= row['Vol_MA'] * 1.1: 
-            print("Skipped SHORT: Volume too low")
-            return False
-        if row['ATR'] < 0.6: 
-            print("Skipped SHORT: ATR too low")
-            return False
-        if row['RSI'] < 22: 
-            print("Skipped SHORT: RSI Oversold")
-            return False
-        if row['ADX'] < 15: 
-            print("Skipped SHORT: ADX too weak")
-            return False
-        if row['MACD'] >= row['MACD_Signal']: 
-            print("Skipped SHORT: MACD not bearish")
-            return False
-
-        print("✅ SHORT Signal Accepted!")
+        if row['Close'] >= row['EMA100']: return False
+        if row['Close'] >= row['Don_Low']: return False
+        if row['Volume'] <= row['Vol_MA'] * 1.1: return False
+        if row['ATR'] < 0.6: return False
+        if row['RSI'] < 22: return False
+        if row['ADX'] < 15: return False
+        if row['MACD'] >= row['MACD_Signal']: return False
         return True
 
     def open_position(self, side):
@@ -231,7 +197,7 @@ class SmartCloudBot:
                 if close >= self.tp1_price and self.tp1_price != 0:
                     partial_pnl = (self.tp1_price - self.entry_price) * 100 * 0.5
                     self.balance += partial_pnl
-                    self.send_msg(f"✅ Partial Close LONG 50% | +${partial_pnl:.2f}")
+                    self.send_msg(f"✅ Partial Close LONG | +${partial_pnl:.2f}")
                     self.tp1_price = 0
                     self.save_position()
 
@@ -253,7 +219,7 @@ class SmartCloudBot:
                 if close <= self.tp1_price and self.tp1_price != 0:
                     partial_pnl = (self.entry_price - self.tp1_price) * 100 * 0.5
                     self.balance += partial_pnl
-                    self.send_msg(f"✅ Partial Close SHORT 50% | +${partial_pnl:.2f}")
+                    self.send_msg(f"✅ Partial Close SHORT | +${partial_pnl:.2f}")
                     self.tp1_price = 0
                     self.save_position()
 
