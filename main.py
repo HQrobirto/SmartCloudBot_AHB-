@@ -21,7 +21,7 @@ TP1_MULTIPLIER = 2.0
 TP2_MULTIPLIER = 4.0
 TRAILING_ACTIVATION = 1.5
 QUANTITY = 0.01          # حجم الصفقة الكامل
-PARTIAL_QUANTITY = 0.005 # 50% للإغلاق الجزئي
+PARTIAL_QUANTITY = 0.003 # 50% للإغلاق الجزئي
 
 client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
 
