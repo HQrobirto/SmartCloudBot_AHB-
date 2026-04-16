@@ -158,6 +158,7 @@ class SmartCloudBot:
         ])
 
     def layered_smart_short(self, row):
+        """جوهر البوت: فلاتر الدخول لصفقات الـ Short"""
         return all([
             row['Close'] < row['EMA100'],
             row['Close'] < row['Don_Low'],
