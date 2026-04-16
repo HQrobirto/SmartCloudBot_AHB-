@@ -20,8 +20,10 @@ SL_MULTIPLIER = 1.5
 TP1_MULTIPLIER = 2.0
 TP2_MULTIPLIER = 4.0
 TRAILING_ACTIVATION = 1.5
-QUANTITY = 0.01          # حجم الصفقة الكامل
-PARTIAL_QUANTITY = 0.003 # 50% للإغلاق الجزئي
+
+QUANTITY = 0.02          # حجم الصفقة الكامل (ليسمح بالقسمة)
+PARTIAL_QUANTITY = 0.01  # حجم الإغلاق الجزئي (الحد الأدنى المسموح به)
+
 
 client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
 
