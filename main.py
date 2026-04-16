@@ -142,8 +142,9 @@ class SmartCloudBot:
         minus_di = 100 * (minus_dm.rolling(14).mean() / atr)
         dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
         df['ADX'] = dx.rolling(14).mean()
-
+                df.dropna(inplace=True) 
         return df
+
 
     def layered_smart_long(self, row):
         return all([
