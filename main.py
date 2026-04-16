@@ -197,7 +197,7 @@ class SmartCloudBot:
                 quantity=PARTIAL_QUANTITY,
                 reduceOnly=True
             )
-            self.quantity = PARTIAL_QUANTITY
+            self.quantity -= PARTIAL_QUANTITY
             self.send_msg(f"✅ Partial Close 50% | تم إغلاق {PARTIAL_QUANTITY} عقد")
             self.save_position()
         except Exception as e:
