@@ -152,7 +152,7 @@ class SmartCloudBot:
             row['Close'] > row['Don_High'],
             row['Volume'] > row['Vol_MA'] * 1.1,
             row['ATR'] > 0.6,
-            row['RSI'] < 78,
+            row['RSI'] < 22,
             row['ADX'] > 15,
             row['MACD'] > row['MACD_Signal']
         ])
