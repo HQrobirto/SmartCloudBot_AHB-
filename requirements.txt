@@ -1,8 +1,9 @@
-binance
+python-binance
+requests
+pandas
 cryptography
 aiohttp
 ccxt
-pandas
 numpy
 yfinance
 requests
