@@ -6,7 +6,6 @@ aiohttp
 ccxt
 numpy
 yfinance
-requests
 matplotlib
 groq
 python-dotenv
