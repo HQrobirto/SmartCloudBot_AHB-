@@ -152,7 +152,7 @@ class SmartCloudBot:
             row['Close'] > row['Don_High'],
             row['Volume'] > row['Vol_MA'] * 1.1,
             row['ATR'] > 0.6,
-            row['RSI'] < 22,
+            row['RSI'] < 78,
             row['ADX'] > 15,
             row['MACD'] > row['MACD_Signal']
         ])
@@ -206,6 +206,11 @@ class SmartCloudBot:
         # تهيئة الـ AsyncClient
         self.client = await AsyncClient.create(BINANCE_API_KEY, BINANCE_API_SECRET)
         self.send_msg("📡 SmartCloudBot v8.0 شغال على Binance Futures (Async Mode)")
+self.client = await AsyncClient.create(
+    BINANCE_API_KEY, 
+    BINANCE_API_SECRET, 
+    testnet=True
+)
 
         try:
             while True:
