@@ -210,8 +210,8 @@ class SmartCloudBot:
     BINANCE_API_SECRET, 
     testnet=True
 )
-  try:
-    while True:
+   try:
+     while True:
                 # سحب البيانات بشكل أسرع
                 new_df = await self.get_latest_data()
                 self.df = new_df 
