@@ -204,15 +204,14 @@ class SmartCloudBot:
 
     async def run(self):
         # تهيئة الـ AsyncClient
-        self.client = await AsyncClient.create(BINANCE_API_KEY, BINANCE_API_SECRET)
         self.send_msg("📡 SmartCloudBot v8.0 شغال على Binance Futures (Async Mode)")
-self.client = await AsyncClient.create(
+        self.client = await AsyncClient.create(
     BINANCE_API_KEY, 
     BINANCE_API_SECRET, 
     testnet=True
 )
   try:
-            while True:
+    while True:
                 # سحب البيانات بشكل أسرع
                 new_df = await self.get_latest_data()
                 self.df = new_df 
