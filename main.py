@@ -211,8 +211,7 @@ self.client = await AsyncClient.create(
     BINANCE_API_SECRET, 
     testnet=True
 )
-
-        try:
+  try:
             while True:
                 # سحب البيانات بشكل أسرع
                 new_df = await self.get_latest_data()
