@@ -1,6 +1,6 @@
 python-binance
-requests
 pandas
+pandas-ta
 cryptography
 aiohttp
 ccxt
