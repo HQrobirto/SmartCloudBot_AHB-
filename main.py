@@ -15,14 +15,14 @@ CHAT_ID            = os.environ.get("CHAT_ID")
 SYMBOL = "XAUUSDT"
 INTERVAL = "5m"
 
-INITIAL_BALANCE = 5000.0
+INITIAL_BALANCE = 100.0
 SL_MULTIPLIER = 1.5
 TP1_MULTIPLIER = 2.0
 TP2_MULTIPLIER = 4.0
 TRAILING_ACTIVATION = 1.5
 
 QUANTITY = 0.01
-PARTIAL_QUANTITY = 0.005
+PARTIAL_QUANTITY = 0.002
 
 client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
 
@@ -142,7 +142,7 @@ class SmartCloudBot:
             row['Close'] > row['Don_High'],
             row['Volume'] > row['Vol_MA'] * 1.1,
             row['ATR'] > 0.6,
-            row['RSI'] < 78,
+            row['RSI'] < 22,
             row['ADX'] > 15,
             row['MACD'] > row['MACD_Signal']
         ])
