@@ -34,7 +34,14 @@ MIN_QUANTITY = 0.01
 MAX_QUANTITY = 5.0
 
 # ===================================================
-
+def send_telegram_msg(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message}
+    try:
+        requests.post(url, json=payload)
+    except Exception as e:
+        print(f"❌ Telegram Error: {e}")
+        
 # إنشاء العميل مع دعم Testnet
 client = Client(API_KEY, API_SECRET, testnet=TESTNET)
 
@@ -140,7 +147,7 @@ def main():
                     quantity = max(MIN_QUANTITY, min(MAX_QUANTITY, round(quantity, 3)))
 
                     print(f"📊 رصيد: {balance:.2f} USDT | مخاطرة: {risk_amount:.2f} | كمية الدخول: {quantity} XAU")
-
+ 
                     # إشارة شراء
                     if (latest['ema50'] > latest['ema200'] and
                         latest['rsi'] < ENTRY_RSI_LONG and
