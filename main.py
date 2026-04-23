@@ -4,6 +4,10 @@ import pandas as pd
 import pandas_ta as ta
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
+import requests
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+
 
 # ====================== CONFIG ======================
 API_KEY = os.getenv("BINANCE_API_KEY")
