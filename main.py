@@ -149,7 +149,9 @@ def main():
                     print(f"📊 رصيد: {balance:.2f} USDT | مخاطرة: {risk_amount:.2f} | كمية الدخول: {quantity} XAU")
  
                     # إشارة شراء
-                    if (latest['ema50'] > latest['ema200'] and
+                    if (send_telegram_msg(f"✅ تم فتح صفقة شراء ذهب بسعر: {current_price}")
+                        
+                    if( latest['ema50'] > latest['ema200'] and
                         latest['rsi'] < ENTRY_RSI_LONG and
                         latest['ADX_14'] > ENTRY_ADX and
                         latest['DMP_14'] > latest['DMN_14']):
