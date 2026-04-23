@@ -163,6 +163,7 @@ def main():
                             quantity=quantity
                         )
                         print(f"🟢 صفقة شراء فتحت | كمية: {quantity} | سعر: {current_price}")
+                        send_telegram_msg(f"🔴 تم فتح صفقة بيع ذهب بسعر: {current_price}")
 
                     # إشارة بيع
                     elif (latest['ema50'] < latest['ema200'] and
